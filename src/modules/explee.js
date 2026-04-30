@@ -8,9 +8,11 @@ function headers() {
   const k = getKey();
   return { 'Content-Type': 'application/json', ...(k ? { 'x-explee-key': k } : {}) };
 }
+function hasKey() { return !!getKey(); }
 
 export async function searchLeads({ query, industry, country, companySize, page = 1, limit = 25 }) {
-  // Explee uses semantic ICP descriptions
+  if (!hasKey()) throw new Error('NO_KEY');
+
   const body = {
     query: query || `${industry ? industry + ' companies' : 'businesses'} in ${country || 'worldwide'}`,
     filters: {
@@ -21,14 +23,37 @@ export async function searchLeads({ query, industry, country, companySize, page 
     page,
     limit
   };
-  const res = await fetch(`${BASE}/v1/search`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Explee Search: ${res.status} ${res.statusText}`);
-  return res.json();
+
+  // Explee may use different base paths depending on plan / version
+  const endpoints = [
+    `${BASE}/v1/search`,
+    `${BASE}/v1/leads/search`,
+    `${BASE}/search`,
+    `${BASE}/api/v1/search`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      if (res.status === 401 || res.status === 403) throw new Error('INVALID_KEY');
+      if (res.status === 404) continue; // try next endpoint
+      if (!res.ok) throw new Error(`Explee: ${res.status}`);
+      return res.json();
+    } catch (e) {
+      if (e.message === 'INVALID_KEY') throw e;
+    }
+  }
+
+  // All endpoints returned 404 — return empty so other sources still work
+  return { results: [], leads: [], data: [] };
 }
 
 export async function enrichContact({ email, firstName, lastName, company, domain }) {
+  if (!hasKey()) throw new Error('NO_KEY');
   const body = { email, first_name: firstName, last_name: lastName, company, domain };
-  const res = await fetch(`${BASE}/v1/enrich/contact`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+  const res = await fetch(`${BASE}/v1/enrich/contact`, {
+    method: 'POST', headers: headers(), body: JSON.stringify(body)
+  });
   if (!res.ok) throw new Error(`Explee Enrich: ${res.status}`);
   return res.json();
 }

@@ -9,33 +9,48 @@ function headers() {
   return { 'Content-Type': 'application/json', ...(k ? { 'x-explorium-key': k } : {}) };
 }
 
+function hasKey() { return !!getKey(); }
+
 export async function enrichFirmographics({ companyName, domain, country }) {
-  const body = {
-    businesses: [{ name: companyName, domain, country }]
-  };
-  const res = await fetch(`${BASE}/bundle/v1/enrich/firmographics`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Explorium Firmographics: ${res.status} ${res.statusText}`);
+  if (!hasKey()) throw new Error('NO_KEY');
+  const body = { businesses: [{ name: companyName, domain, country }] };
+  const res = await fetch(`${BASE}/bundle/v1/enrich/firmographics`, {
+    method: 'POST', headers: headers(), body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Explorium Firmographics: ${res.status}`);
   return res.json();
 }
 
 export async function enrichProspects({ companyName, domain, jobTitles = [], country }) {
+  if (!hasKey()) throw new Error('NO_KEY');
   const body = {
     businesses: [{ name: companyName, domain, country }],
     filters: { job_titles: jobTitles }
   };
-  const res = await fetch(`${BASE}/v1/prospects/contacts_information/enrich`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+  const res = await fetch(`${BASE}/v1/prospects/contacts_information/enrich`, {
+    method: 'POST', headers: headers(), body: JSON.stringify(body)
+  });
   if (!res.ok) throw new Error(`Explorium Prospects: ${res.status}`);
   return res.json();
 }
 
 export async function getBusinessSignals({ companyName, domain }) {
+  if (!hasKey()) return { data: [] };
   const body = { businesses: [{ name: companyName, domain }] };
-  const res = await fetch(`${BASE}/bundle/v1/enrich/signals`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  if (!res.ok) return { data: [] };
-  return res.json();
+  try {
+    const res = await fetch(`${BASE}/bundle/v1/enrich/signals`, {
+      method: 'POST', headers: headers(), body: JSON.stringify(body)
+    });
+    if (!res.ok) return { data: [] };
+    return res.json();
+  } catch { return { data: [] }; }
 }
 
+// searchProspects: Explorium's prospect discovery API.
+// Falls back to empty list if no key or endpoint unavailable (404/403).
 export async function searchProspects({ industry, country, jobTitles = [], companySize, page = 1, limit = 25 }) {
+  if (!hasKey()) throw new Error('NO_KEY');
+
   const body = {
     industry,
     country,
@@ -44,9 +59,30 @@ export async function searchProspects({ industry, country, jobTitles = [], compa
     page,
     limit
   };
-  const res = await fetch(`${BASE}/v1/prospects/search`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Explorium Prospect Search: ${res.status}`);
-  return res.json();
+
+  // Try v2 endpoint first (newer Explorium API), fall back to v1
+  const endpoints = [
+    `${BASE}/v2/prospects/search`,
+    `${BASE}/v1/prospects/search`,
+    `${BASE}/bundle/v1/prospects/search`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      if (res.status === 401) throw new Error('INVALID_KEY');
+      if (res.status === 404) continue; // try next endpoint
+      if (!res.ok) throw new Error(`Explorium: ${res.status}`);
+      return res.json();
+    } catch (e) {
+      if (e.message === 'INVALID_KEY') throw e;
+      // network error on this endpoint — try next
+    }
+  }
+
+  // All endpoints returned 404 — Explorium prospect search may not be
+  // available on this plan. Return empty so other sources still work.
+  return { prospects: [], results: [], data: [] };
 }
 
 export function normalizeFirmographics(data) {

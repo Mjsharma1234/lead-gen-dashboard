@@ -15,6 +15,18 @@ let sortDir = 'asc';
 let currentPage = 1;
 const PAGE_SIZE = 20;
 
+// Keys stored in localStorage by the Settings panel
+const KEY_MAP = {
+  apollo:    'apollo_key',
+  explee:    'explee_key',
+  explorium: 'explorium_key',
+  apify:     'apify_key',
+};
+
+function hasKey(source) {
+  return !!localStorage.getItem(KEY_MAP[source]);
+}
+
 export function initLeadSearch() {
   document.getElementById('btn-search').addEventListener('click', doSearch);
   document.getElementById('btn-clear').addEventListener('click', clearForm);
@@ -58,6 +70,51 @@ export function initLeadSearch() {
   });
 }
 
+// ─── Pre-flight: show a warning banner if selected sources have no keys ───────
+function preflightKeyCheck(sources) {
+  const missing = Object.entries(sources)
+    .filter(([src, enabled]) => enabled && !hasKey(src))
+    .map(([src]) => src);
+
+  if (missing.length === 0) return true; // all good
+
+  // If ALL selected sources are missing keys, block and redirect
+  const allMissing = Object.entries(sources).every(([src, enabled]) => !enabled || !hasKey(src));
+  if (allMissing) {
+    toast(
+      `⚙ No API keys configured. Go to Settings → paste your keys first.`,
+      'error', 6000
+    );
+    // Flash the settings nav button
+    document.getElementById('nav-settings')?.classList.add('active');
+    setTimeout(() => document.getElementById('nav-settings')?.classList.remove('active'), 3000);
+    return false;
+  }
+
+  // Some sources missing — warn but continue with what's available
+  toast(
+    `⚠ Missing keys for: ${missing.join(', ')}. Add them in ⚙ Settings. Searching with remaining sources…`,
+    'info', 5000
+  );
+  return true;
+}
+
+// ─── Human-readable error interpretation ─────────────────────────────────────
+function interpretError(source, message) {
+  if (message === 'NO_KEY' || message.includes('NO_KEY')) {
+    return null; // silently skip — already warned in preflight
+  }
+  if (message === 'INVALID_KEY' || message.includes('401') || message.includes('403')) {
+    return `${source}: Invalid/expired API key — update it in ⚙ Settings`;
+  }
+  if (message.includes('502') || message.includes('Upstream')) {
+    return `${source}: Upstream API unreachable`;
+  }
+  // Don't surface generic 404s — means endpoint unavailable on this plan
+  if (message.includes('404')) return null;
+  return `${source}: ${message}`;
+}
+
 async function doSearch() {
   const type = document.getElementById('lead-type').value;
   const industry = document.getElementById('industry').value;
@@ -67,58 +124,95 @@ async function doSearch() {
   const perPage = parseInt(document.getElementById('per-page').value);
 
   const sources = {
-    apollo: document.getElementById('src-apollo').checked,
-    explee: document.getElementById('src-explee').checked,
+    apollo:    document.getElementById('src-apollo').checked,
+    explee:    document.getElementById('src-explee').checked,
     explorium: document.getElementById('src-explorium').checked,
-    apify: document.getElementById('src-apify').checked,
+    apify:     document.getElementById('src-apify').checked,
   };
 
-  if (!Object.values(sources).some(Boolean)) return toast('Select at least one data source', 'error');
+  if (!Object.values(sources).some(Boolean)) {
+    return toast('Select at least one data source', 'error');
+  }
+
+  // ── Pre-flight key check ──
+  if (!preflightKeyCheck(sources)) return;
 
   const btn = document.getElementById('btn-search');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px"></span> Searching…';
 
   document.getElementById('results-card').style.display = 'block';
-  document.getElementById('leads-tbody').innerHTML = `<tr class="loading-row"><td colspan="10"><div style="display:flex;justify-content:center"><div class="spinner"></div></div></td></tr>`;
+  document.getElementById('leads-tbody').innerHTML =
+    `<tr class="loading-row"><td colspan="10"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px"><div class="spinner"></div><span style="color:var(--text-dim);font-size:.82rem">Querying sources in parallel…</span></div></td></tr>`;
 
   const results = [];
   const errors = [];
-  const params = { industries: industry ? [industry] : [], countries: country ? [country] : [], keywords, seniorities: seniority ? [seniority] : [], perPage, page: 1 };
+  const params = {
+    industries: industry ? [industry] : [],
+    countries:  country  ? [country]  : [],
+    keywords,
+    seniorities: seniority ? [seniority] : [],
+    perPage,
+    page: 1
+  };
 
   const jobs = [];
 
-  if (sources.apollo) jobs.push(
-    (type === 'person'
-      ? searchPeople(params).then(d => normalizeApolloLeads(d, 'person'))
-      : searchCompanies(params).then(d => normalizeApolloLeads(d, 'company'))
-    ).then(leads => results.push(...leads)).catch(e => errors.push(`Apollo: ${e.message}`))
-  );
+  if (sources.apollo && hasKey('apollo')) {
+    jobs.push(
+      (type === 'person'
+        ? searchPeople(params).then(d => normalizeApolloLeads(d, 'person'))
+        : searchCompanies(params).then(d => normalizeApolloLeads(d, 'company'))
+      )
+        .then(leads => results.push(...leads))
+        .catch(e => {
+          const msg = interpretError('Apollo', e.message);
+          if (msg) errors.push(msg);
+        })
+    );
+  }
 
-  if (sources.explee) jobs.push(
-    expleeSearch({ query: keywords, industry, country, page: 1, limit: perPage })
-      .then(d => normalizeExpleeLeads(d))
-      .then(leads => results.push(...leads))
-      .catch(e => errors.push(`Explee: ${e.message}`))
-  );
+  if (sources.explee && hasKey('explee')) {
+    jobs.push(
+      expleeSearch({ query: keywords, industry, country, page: 1, limit: perPage })
+        .then(d => normalizeExpleeLeads(d))
+        .then(leads => results.push(...leads))
+        .catch(e => {
+          const msg = interpretError('Explee', e.message);
+          if (msg) errors.push(msg);
+        })
+    );
+  }
 
-  if (sources.explorium) jobs.push(
-    searchProspects({ industry, country, jobTitles: keywords ? [keywords] : [], page: 1, limit: perPage })
-      .then(d => normalizeExploriumLeads(d))
-      .then(leads => results.push(...leads))
-      .catch(e => errors.push(`Explorium: ${e.message}`))
-  );
+  if (sources.explorium && hasKey('explorium')) {
+    jobs.push(
+      searchProspects({ industry, country, jobTitles: keywords ? [keywords] : [], page: 1, limit: perPage })
+        .then(d => normalizeExploriumLeads(d))
+        .then(leads => results.push(...leads))
+        .catch(e => {
+          const msg = interpretError('Explorium', e.message);
+          if (msg) errors.push(msg);
+        })
+    );
+  }
 
-  if (sources.apify) jobs.push(
-    runGoogleMapsSearch({ query: keywords || industry || 'business', country: country || 'US', maxResults: perPage })
-      .then(d => normalizeApifyMapsLeads(d))
-      .then(leads => results.push(...leads))
-      .catch(e => errors.push(`Apify: ${e.message}`))
-  );
+  if (sources.apify && hasKey('apify')) {
+    jobs.push(
+      runGoogleMapsSearch({ query: keywords || industry || 'business', country: country || 'US', maxResults: perPage })
+        .then(d => normalizeApifyMapsLeads(d))
+        .then(leads => results.push(...leads))
+        .catch(e => {
+          const msg = interpretError('Apify', e.message);
+          if (msg) errors.push(msg);
+        })
+    );
+  }
 
   await Promise.allSettled(jobs);
 
-  if (errors.length) toast(`Some sources failed: ${errors.join(' | ')}`, 'error', 5000);
+  if (errors.length) {
+    errors.forEach(err => toast(err, 'error', 6000));
+  }
 
   allLeads = deduplicateLeads(results);
   filtered = allLeads;
@@ -128,7 +222,14 @@ async function doSearch() {
 
   btn.disabled = false;
   btn.innerHTML = '🔍 Search Leads';
-  if (!allLeads.length) toast('No leads found. Check your API keys in Settings.', 'info');
+
+  if (!allLeads.length && !errors.length) {
+    toast('No leads found for this search. Try broadening your filters.', 'info');
+  } else if (!allLeads.length && errors.length) {
+    toast('No results — check your API keys in ⚙ Settings.', 'info', 5000);
+  } else {
+    toast(`Found ${allLeads.length} leads across ${Object.keys(getLeadStats(allLeads).bySource).length} source(s)`, 'success', 3000);
+  }
 }
 
 function renderStats() {
@@ -150,7 +251,7 @@ function renderTable() {
   document.getElementById('result-count').textContent = total;
 
   if (!page.length) {
-    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🔍</div><p>No leads found for this filter</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🔍</div><p>No leads found. Try different filters or check your API keys in ⚙ Settings.</p></div></td></tr>`;
     document.getElementById('pagination').innerHTML = '';
     return;
   }
@@ -159,7 +260,7 @@ function renderTable() {
     const saved = isLeadSaved(lead);
     const src = lead.source?.toLowerCase() || '';
     return `<tr>
-      <td><button class="save-btn ${saved ? 'saved' : ''}" data-id="${lead.id}" title="${saved ? 'Unsave' : 'Save'}">★</button></td>
+      <td><button class="save-btn ${saved ? 'saved' : ''}" data-id="${lead.id}" title="${saved ? 'Saved' : 'Save lead'}">★</button></td>
       <td class="td-name">${esc(lead.name)}</td>
       <td class="td-title">${esc(lead.title)}</td>
       <td class="td-company">${esc(lead.company)}</td>
@@ -172,7 +273,6 @@ function renderTable() {
     </tr>`;
   }).join('');
 
-  // Save buttons
   tbody.querySelectorAll('.save-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const lead = allLeads.find(l => l.id === btn.dataset.id) || filtered.find(l => l.id === btn.dataset.id);
