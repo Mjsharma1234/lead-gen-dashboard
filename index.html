@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Lead Generation & Competitive Analysis Dashboard — search B2B leads via Apollo.io, Explee, Explorium and Apify with email, phone and website data." />
+  <title>LeadFlow — Lead Gen & Competitive Intelligence</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+</head>
+<body>
+  <div id="app">
+    <!-- HEADER -->
+    <header class="header">
+      <a class="header-logo" href="#">
+        <div class="logo-icon">⚡</div>
+        <span>LeadFlow</span>
+      </a>
+      <nav class="header-nav">
+        <button class="nav-btn active" data-panel="leads" id="nav-leads">
+          🔍 Lead Search
+        </button>
+        <button class="nav-btn" data-panel="competition" id="nav-competition">
+          📊 Competition
+        </button>
+        <button class="nav-btn" data-panel="saved" id="nav-saved">
+          ★ Saved <span class="nav-badge" id="saved-count" style="display:none">0</span>
+        </button>
+        <button class="nav-btn" data-panel="settings" id="nav-settings">
+          ⚙ Settings
+        </button>
+      </nav>
+      <div class="header-actions">
+        <div class="server-badge" id="server-badge">
+          <span class="dot"></span>
+          <span id="server-status-text">Proxy Offline</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══ LEAD SEARCH PANEL ═══ -->
+    <section class="panel active" id="panel-leads">
+      <!-- Hero -->
+      <div class="hero-strip">
+        <div>
+          <h1>Lead Generation</h1>
+          <p>Search across Apollo.io · Explee · Explorium · Apify simultaneously</p>
+        </div>
+        <div class="stat-pills">
+          <div class="stat-pill"><div class="val" id="stat-total">0</div><div class="lbl">Total Leads</div></div>
+          <div class="stat-pill"><div class="val" id="stat-email">0</div><div class="lbl">With Email</div></div>
+          <div class="stat-pill"><div class="val" id="stat-phone">0</div><div class="lbl">With Phone</div></div>
+        </div>
+      </div>
+
+      <!-- Search Form -->
+      <div class="card">
+        <div class="card-title">Search Filters</div>
+        <div class="search-grid" id="search-form">
+          <div class="form-group">
+            <label for="lead-type">Lead Type</label>
+            <select class="form-control" id="lead-type">
+              <option value="person">👤 People / Contacts</option>
+              <option value="company">🏢 Companies</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="industry">Industry</label>
+            <select class="form-control" id="industry">
+              <option value="">All Industries</option>
+              <option>SaaS / Software</option>
+              <option>Fintech</option>
+              <option>Healthcare</option>
+              <option>E-commerce / Retail</option>
+              <option>Marketing &amp; Advertising</option>
+              <option>Real Estate</option>
+              <option>Education</option>
+              <option>Manufacturing</option>
+              <option>Consulting</option>
+              <option>Legal</option>
+              <option>HR &amp; Recruiting</option>
+              <option>Logistics &amp; Supply Chain</option>
+              <option>Media &amp; Entertainment</option>
+              <option>Cybersecurity</option>
+              <option>AI / Machine Learning</option>
+              <option>Biotech</option>
+              <option>Government</option>
+              <option>Non-profit</option>
+              <option>Insurance</option>
+              <option>Telecommunications</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="country">Country</label>
+            <select class="form-control" id="country">
+              <option value="">All Countries</option>
+              <option>United States</option>
+              <option>United Kingdom</option>
+              <option>India</option>
+              <option>Canada</option>
+              <option>Germany</option>
+              <option>Australia</option>
+              <option>France</option>
+              <option>Netherlands</option>
+              <option>Singapore</option>
+              <option>UAE</option>
+              <option>Brazil</option>
+              <option>Spain</option>
+              <option>Israel</option>
+              <option>Sweden</option>
+              <option>Denmark</option>
+            </select>
+          </div>
+          <div class="form-group" id="seniority-group">
+            <label for="seniority">Seniority</label>
+            <select class="form-control" id="seniority">
+              <option value="">Any Level</option>
+              <option value="c_suite">C-Suite (CEO, CTO…)</option>
+              <option value="vp">VP</option>
+              <option value="director">Director</option>
+              <option value="manager">Manager</option>
+              <option value="owner">Owner / Founder</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="keywords">Keywords / Job Title</label>
+            <input class="form-control" id="keywords" type="text" placeholder="e.g. CTO, Growth Hacker…" />
+          </div>
+          <div class="form-group">
+            <label for="per-page">Results per source</label>
+            <select class="form-control" id="per-page">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Source selector -->
+        <div style="margin-top:16px">
+          <div class="card-title" style="margin-bottom:8px">Data Sources</div>
+          <div class="source-chips">
+            <label class="source-chip apollo checked" id="chip-apollo">
+              <input type="checkbox" id="src-apollo" checked />
+              <span class="chip-dot"></span> Apollo.io
+            </label>
+            <label class="source-chip explee checked" id="chip-explee">
+              <input type="checkbox" id="src-explee" checked />
+              <span class="chip-dot"></span> Explee
+            </label>
+            <label class="source-chip explorium checked" id="chip-explorium">
+              <input type="checkbox" id="src-explorium" checked />
+              <span class="chip-dot"></span> Explorium
+            </label>
+            <label class="source-chip apify checked" id="chip-apify">
+              <input type="checkbox" id="src-apify" checked />
+              <span class="chip-dot"></span> Apify
+            </label>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="btn-search">
+            🔍 Search Leads
+          </button>
+          <button class="btn btn-outline" id="btn-clear">Clear</button>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="card" id="results-card" style="display:none">
+        <div class="results-toolbar">
+          <div class="results-count">
+            Found <strong id="result-count">0</strong> leads
+            <span id="source-breakdown" style="color:var(--text-muted);font-size:.78rem;margin-left:8px"></span>
+          </div>
+          <div class="toolbar-right">
+            <input class="search-inline" id="inline-search" type="text" placeholder="Filter results…" />
+            <button class="btn btn-outline btn-sm" id="btn-save-all">★ Save All</button>
+            <button class="btn btn-success btn-sm" id="btn-export">⬇ Export Excel</button>
+          </div>
+        </div>
+        <div style="margin-top:14px" class="table-wrap">
+          <table id="leads-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th data-sort="name">Name <span class="sort-icon">↕</span></th>
+                <th data-sort="title">Title <span class="sort-icon">↕</span></th>
+                <th data-sort="company">Company <span class="sort-icon">↕</span></th>
+                <th data-sort="industry">Industry <span class="sort-icon">↕</span></th>
+                <th data-sort="country">Country <span class="sort-icon">↕</span></th>
+                <th data-sort="email">Email <span class="sort-icon">↕</span></th>
+                <th data-sort="phone">Phone <span class="sort-icon">↕</span></th>
+                <th data-sort="website">Website <span class="sort-icon">↕</span></th>
+                <th data-sort="source">Source <span class="sort-icon">↕</span></th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody"></tbody>
+          </table>
+        </div>
+        <div id="pagination" class="pagination" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ═══ COMPETITION PANEL ═══ -->
+    <section class="panel" id="panel-competition">
+      <div class="hero-strip">
+        <div>
+          <h1>Competitive Intelligence</h1>
+          <p>Full firmographic data + live web insights from Explorium &amp; Apify</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Analyze a Competitor</div>
+        <div class="comp-search-row">
+          <div class="form-group" style="flex:1">
+            <label for="comp-name">Company Name</label>
+            <input class="form-control" id="comp-name" type="text" placeholder="e.g. Salesforce" />
+          </div>
+          <div class="form-group" style="flex:1">
+            <label for="comp-domain">Domain (optional)</label>
+            <input class="form-control" id="comp-domain" type="text" placeholder="e.g. salesforce.com" />
+          </div>
+          <div class="form-group" style="flex:1">
+            <label for="comp-country">Country (optional)</label>
+            <input class="form-control" id="comp-country" type="text" placeholder="e.g. United States" />
+          </div>
+          <button class="btn btn-primary" id="btn-analyze" style="margin-bottom:1px">
+            📊 Analyze
+          </button>
+          <button class="btn btn-outline" id="btn-export-comp" style="margin-bottom:1px">⬇ Export</button>
+        </div>
+      </div>
+
+      <div id="comp-results">
+        <div class="empty-state">
+          <div class="empty-icon">📊</div>
+          <p>Enter a company name above and click Analyze to get started</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ SAVED LEADS PANEL ═══ -->
+    <section class="panel" id="panel-saved">
+      <div class="hero-strip">
+        <div>
+          <h1>Saved Leads</h1>
+          <p>Your curated list — persisted locally across sessions</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-success btn-sm" id="btn-export-saved">⬇ Export Excel</button>
+          <button class="btn btn-outline btn-sm" id="btn-clear-saved">🗑 Clear All</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="saved-table">
+            <thead>
+              <tr>
+                <th>Name</th><th>Title</th><th>Company</th>
+                <th>Email</th><th>Phone</th><th>Website</th><th>Source</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="saved-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ SETTINGS PANEL ═══ -->
+    <section class="panel" id="panel-settings">
+      <div class="hero-strip">
+        <div>
+          <h1>API Settings</h1>
+          <p>Enter your API keys below. They are stored only in your browser's localStorage.</p>
+        </div>
+      </div>
+      <div class="settings-grid" id="settings-grid"></div>
+      <div class="card" style="margin-top:0">
+        <div class="card-title">How to Run the Proxy Server</div>
+        <pre style="background:var(--surface);padding:14px;border-radius:8px;font-size:.8rem;color:var(--cyan);overflow-x:auto">
+# 1. Copy .env.example to .env and fill in your keys (optional — you can also use the Settings panel)
+copy .env.example .env
+
+# 2. Start the proxy server (required for API calls)
+node server.js
+
+# 3. In a separate terminal, start the frontend
+npm run dev
+        </pre>
+      </div>
+    </section>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
