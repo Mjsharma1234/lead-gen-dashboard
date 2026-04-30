@@ -14,16 +14,28 @@ export async function searchPeople({ titles = [], industries = [], countries = [
   const body = {
     page,
     per_page: perPage,
+    // person_titles: free-text job title search
     ...(titles.length && { person_titles: titles }),
-    ...(industries.length && { organization_industry_tag_ids: industries, organization_industries: industries }),
+    // organization_industries: string names (NOT tag IDs)
+    ...(industries.length && { organization_industries: industries }),
+    // person_locations: city, state, or country names
     ...(countries.length && { person_locations: countries }),
+    // person_seniorities: owner/c_suite/vp/director/manager/individual contributor
     ...(seniorities.length && { person_seniorities: seniorities }),
+    // q_keywords: broad keyword match
     ...(keywords && { q_keywords: keywords }),
-    contact_email_status: ['verified', 'likely to engage', 'email_not_empty'],
-    include_similar_titles: true
   };
-  const res = await fetch(`${BASE}/people/search`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Apollo People Search: ${res.status} ${res.statusText}`);
+  const res = await fetch(`${BASE}/people/search`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    // Capture Apollo's error detail for debugging
+    let detail = '';
+    try { const d = await res.clone().json(); detail = JSON.stringify(d); } catch {}
+    throw new Error(`Apollo People Search: ${res.status}${detail ? ' — ' + detail : ''}`);
+  }
   return res.json();
 }
 
@@ -37,13 +49,17 @@ export async function enrichPerson({ firstName, lastName, email, domain, linkedi
 export async function searchCompanies({ industries = [], countries = [], keywords = '', employeeRanges = [], page = 1, perPage = 25 } = {}) {
   const body = {
     page, per_page: perPage,
-    ...(industries.length && { organization_industry_tag_ids: industries }),
+    ...(industries.length && { organization_industries: industries }),
     ...(countries.length && { organization_locations: countries }),
     ...(keywords && { q_organization_keyword_tags: [keywords] }),
     ...(employeeRanges.length && { num_employees_ranges: employeeRanges })
   };
   const res = await fetch(`${BASE}/companies/search`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Apollo Companies Search: ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try { const d = await res.clone().json(); detail = JSON.stringify(d); } catch {}
+    throw new Error(`Apollo Companies Search: ${res.status}${detail ? ' — ' + detail : ''}`);
+  }
   return res.json();
 }
 

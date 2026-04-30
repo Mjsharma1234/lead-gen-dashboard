@@ -107,6 +107,11 @@ function interpretError(source, message) {
   if (message === 'INVALID_KEY' || message.includes('401') || message.includes('403')) {
     return `${source}: Invalid/expired API key — update it in ⚙ Settings`;
   }
+  if (message.includes('422')) {
+    // Extract Apollo's detail if present
+    const detail = message.includes('—') ? message.split('—')[1]?.trim() : '';
+    return `${source}: Request rejected by API${detail ? ': ' + detail.slice(0, 120) : ' (422 — invalid filter values)'}`;
+  }
   if (message.includes('502') || message.includes('Upstream')) {
     return `${source}: Upstream API unreachable`;
   }
