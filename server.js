@@ -32,7 +32,7 @@ app.use(cors({
     'http://127.0.0.1:5173'
   ],
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-apollo-key', 'x-explee-key', 'x-explorium-key', 'x-apify-key']
 }));
 
 // ─── Helper: forward fetch ────────────────────────────────────────────────────
@@ -66,27 +66,19 @@ app.get('/api/health', (req, res) => {
 });
 
 // ─── Apollo.io ───────────────────────────────────────────────────────────────
+// Apollo requires api_key in the JSON body — header-only auth is unreliable
 app.post('/api/apollo/people/search', async (req, res) => {
   const key = req.headers['x-apollo-key'] || process.env.APOLLO_API_KEY;
   if (!key) return res.status(401).json({ error: 'Apollo API key not configured' });
 
-  const params = new URLSearchParams();
-  const body = req.body;
-  // Convert body fields to URL params (Apollo's quirky POST-as-query-params)
-  Object.entries(body).forEach(([k, v]) => {
-    if (Array.isArray(v)) v.forEach(item => params.append(`${k}[]`, item));
-    else params.set(k, v);
-  });
+  // Inject api_key into body — the officially required auth method
+  const body = { ...(req.body || {}), api_key: key };
 
   await forwardFetch(res,
-    `https://api.apollo.io/api/v1/mixed_people/search?${params.toString()}`,
+    'https://api.apollo.io/api/v1/mixed_people/search',
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'Cache-Control': 'no-cache'
-      },
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
       body: JSON.stringify(body)
     }
   );
@@ -95,29 +87,24 @@ app.post('/api/apollo/people/search', async (req, res) => {
 app.post('/api/apollo/people/enrich', async (req, res) => {
   const key = req.headers['x-apollo-key'] || process.env.APOLLO_API_KEY;
   if (!key) return res.status(401).json({ error: 'Apollo API key not configured' });
+  const body = { ...(req.body || {}), api_key: key };
   await forwardFetch(res, 'https://api.apollo.io/api/v1/people/match', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'Cache-Control': 'no-cache' },
-    body: JSON.stringify(req.body)
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+    body: JSON.stringify(body)
   });
 });
 
 app.post('/api/apollo/companies/search', async (req, res) => {
   const key = req.headers['x-apollo-key'] || process.env.APOLLO_API_KEY;
   if (!key) return res.status(401).json({ error: 'Apollo API key not configured' });
-
-  const params = new URLSearchParams();
-  Object.entries(req.body).forEach(([k, v]) => {
-    if (Array.isArray(v)) v.forEach(item => params.append(`${k}[]`, item));
-    else params.set(k, v);
-  });
-
+  const body = { ...(req.body || {}), api_key: key };
   await forwardFetch(res,
-    `https://api.apollo.io/api/v1/mixed_companies/search?${params.toString()}`,
+    'https://api.apollo.io/api/v1/mixed_companies/search',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'Cache-Control': 'no-cache' },
-      body: JSON.stringify(req.body)
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+      body: JSON.stringify(body)
     }
   );
 });

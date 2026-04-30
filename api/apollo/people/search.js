@@ -5,19 +5,18 @@ export default async function handler(req, res) {
   const key = req.headers['x-apollo-key'] || process.env.APOLLO_API_KEY;
   if (!key) return res.status(401).json({ error: 'Apollo API key not configured' });
 
-  const body = req.body || {};
-  const params = new URLSearchParams();
-  Object.entries(body).forEach(([k, v]) => {
-    if (Array.isArray(v)) v.forEach(item => params.append(`${k}[]`, item));
-    else params.set(k, v);
-  });
+  // Apollo requires api_key in the request body — header alone is unreliable
+  const body = { ...(req.body || {}), api_key: key };
 
   try {
     const upstream = await fetch(
-      `https://api.apollo.io/api/v1/mixed_people/search?${params.toString()}`,
+      'https://api.apollo.io/api/v1/mixed_people/search',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'Cache-Control': 'no-cache' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
         body: JSON.stringify(body)
       }
     );
